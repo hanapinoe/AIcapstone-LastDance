@@ -1,0 +1,68 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Environment variables
+.env
+
+# VS Code settings
+.vscode/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Python egg files
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.log
+
+# Database files
+*.sqlite3
+
+# Model files and large data
+Backend/app/models/*/
+!Backend/app/models/.gitkeep
+Backend/app/data/*/
+!Backend/app/data/.gitkeep
+
+# Test outputs
+*.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Frontend cache
+Frontend/__pycache__/
+Backend/app/__pycache__/
+Backend/app/controllers/__pycache__/
+Backend/app/services/__pycache__/
+Backend/app/repositories/__pycache__/
+Backend/app/utils/__pycache__/
+Backend/app/test/__pycache__/

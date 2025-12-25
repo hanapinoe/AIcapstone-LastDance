@@ -1,0 +1,15 @@
+transformers
+llama-index-core
+llama-index-llms-huggingface
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+chromadb
+numpy
+pandas
+langchain
+fastapi
+streamlit
+extra-streamlit-components
+mysql-connector-python
+torch --index-url https://download.pytorch.org/whl/cu126
+torchvision --index-url https://download.pytorch.org/whl/cu126
