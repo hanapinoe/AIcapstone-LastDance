@@ -2,6 +2,7 @@ from Backend.app.services.infoAgent.extract_fields import ExtractFieldsService
 from Backend.app.services.infoAgent.rewrite_query_for_rag import RewriteQueryForRAGService
 from Backend.app.services.infoAgent.vectorDB_query import QueryInitializeService
 from Backend.app.services.infoAgent.choose_best_option import ChooseBestOptionService
+from Backend.app.services.rcmAgent.explain import ExplainationService
 
 from typing import Any, Dict, List, Optional, Tuple, Type
 import json
@@ -207,3 +208,21 @@ class infoAgentService:
         print("\n=== RANDOM PICK ===")
         print("All candidates were SKIPped (recommended_options empty).")
         return None, {"recommended_options": {}}
+
+
+class rcmAgentService(infoAgentService):
+    def __init__(self):
+        super().__init__(userQuery="", vectorDB_path="")
+        self._ExplainationService = ExplainationService
+
+    def explain_recommendation(
+        self,
+        parsing_prompt: str,
+        dish_name: str,
+        recommended_options: Any,
+    ) -> str:
+        return self._ExplainationService(
+            parsing_prompt=parsing_prompt,
+            dish_name=dish_name,
+            recommended_options=recommended_options,
+        ).explain_recommendation()
