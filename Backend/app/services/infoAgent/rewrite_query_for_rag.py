@@ -14,6 +14,7 @@ class RewriteQueryForRAGService:
         # Expected keys (depending on ExtractFieldsService):
         # - health_status, taste, context, category, option
         self.fields = fields or {}
+        self.user_query = self.fields.get("user_query", "")
 
     def rewrite_query_for_rag(self):
         """
@@ -64,4 +65,8 @@ class RewriteQueryForRAGService:
 
         # Join using commas to keep chunks separable for retrieval.
         rewritten = ", ".join(parts)
+
+        if not rewritten.strip():
+            rewritten = (self.user_query or "").strip()
+
         return rewritten

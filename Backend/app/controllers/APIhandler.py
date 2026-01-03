@@ -154,6 +154,11 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
             if not isinstance(dish_name, str) or not dish_name.strip():
                 raise HTTPException(
                     status_code=500, detail="Recommended item missing name")
+            
+            dish_type = meta.get("type")
+            if not isinstance(dish_type, str) or not dish_type.strip():
+                raise HTTPException(
+                    status_code=500, detail="Recommended item missing type")
 
             if isinstance(option_result, dict):
                 maybe_opts = option_result.get("recommended_options")
@@ -177,7 +182,7 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
             if isinstance(rec_opts, dict) and len(rec_opts) > 0:
                 # Generate explanation via rcmAgent (LoRA) using the real user query.
                 try:
-                    reason = rcmAgentService().explain_recommendation(query, dish_name, rec_opts)
+                    reason = rcmAgentService().explain_recommendation(query, dish_name, dish_type, rec_opts)
                 except Exception:
                     reason = None
 

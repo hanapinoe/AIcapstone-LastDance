@@ -181,6 +181,7 @@ class infoAgentService:
 
             base_options = meta.get("option_json", "{}")
             dish_name = meta.get("name", "")
+            dish_type = meta.get("type", "")
             canonical_description = meta.get("description", "")
             health_profile = meta.get("health_profile", "")
             context_suitability = meta.get("context_suitability", "")
@@ -191,6 +192,7 @@ class infoAgentService:
             chooser = self._ChooseBestOptionService(
                 fields,
                 dish_name,
+                dish_type,
                 base_options,
                 canonical_description,
                 health_profile,
@@ -219,10 +221,12 @@ class rcmAgentService(infoAgentService):
         self,
         parsing_prompt: str,
         dish_name: str,
+        dish_type: str,
         recommended_options: Any,
     ) -> str:
         return self._ExplainationService(
             parsing_prompt=parsing_prompt,
             dish_name=dish_name,
+            dish_type=dish_type,
             recommended_options=recommended_options,
         ).explain_recommendation()

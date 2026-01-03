@@ -23,7 +23,7 @@ def get_base64_of_bin_file(bin_file):
     return base64.b64encode(data).decode()
 
 
-img_path = r"E:\own\capstone\Frontend\background_image\635918.jpg"
+img_path = r"./Frontend/background_image/635918.jpg"
 img_base64 = get_base64_of_bin_file(img_path)
 
 

@@ -1,15 +1,19 @@
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 import os
 import re
 import json
 import ast
 from typing import Any, Dict
-from dotenv import load_dotenv
 import threading
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    # Optional dependency. In some runtimes (e.g., Modal), we rely on real env vars/secrets.
+    pass
 
 CACHE_DIR = os.getenv("HF_CACHE_DIR")
 MODEL_NAME = os.getenv("MODEL_NAME")
@@ -58,7 +62,7 @@ def _load_LoRA_adapters(lora_path: str):
         lora_path,
         device_map=device_map,
     )
-    return model
+    return model, base_model_name
 
 
 def _parse_model_ref(value: str) -> Dict[str, Any]:
@@ -120,15 +124,24 @@ class llmInitialize:
                 return cached
 
             llm_device_map, _ = _pick_devices()
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_path,
-                trust_remote_code=True,
-                cache_dir=CACHE_DIR,
-            )
 
             if is_lora:
-                model = _load_LoRA_adapters(model_path)
+                # For LoRA adapters, the adapter folder usually does NOT include a tokenizer.
+                # Load tokenizer from the base model referenced by the PEFT config.
+                peft_cfg = PeftConfig.from_pretrained(model_path)
+                base_model_name = peft_cfg.base_model_name_or_path
+                tokenizer = AutoTokenizer.from_pretrained(
+                    base_model_name,
+                    trust_remote_code=True,
+                    cache_dir=CACHE_DIR,
+                )
+                model, _ = _load_LoRA_adapters(model_path)
             else:
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model_path,
+                    trust_remote_code=True,
+                    cache_dir=CACHE_DIR,
+                )
                 kwargs = dict(
                     trust_remote_code=True,
                     cache_dir=CACHE_DIR,
@@ -158,6 +171,9 @@ class embedInitialize:
     def initialize_embedModel(cls):
         if not isinstance(cls._embedModelName, str) or not cls._embedModelName:
             raise ValueError("embedModelName must be a non-empty string")
+
+        # Lazy import so LLM-only deployments (e.g., Modal GPU gateway) don't require llama_index.
+        from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
         _, embed_device = _pick_devices()
 

@@ -1,0 +1,11 @@
+.git
+.venv
+__pycache__/
+*.pyc
+*.log
+*.sqlite3
+
+Backend/app/models/**
+Backend/app/data/UserPreference_chroma_db_E5_base/**
+
+docker_data/**

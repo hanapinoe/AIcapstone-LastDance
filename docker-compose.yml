@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${DB_NAME} # Tạo database tên lấy từ biến môi trường DB_NAME (.env.docker)
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD} # Đặt mật khẩu cho user root của MySQL (lấy từ DB_PASSWORD)
+    ports:
+      - "3307:3306" # Map cổng 3307 của máy host sang 3306 trong container (MySQL mặc định)
+    volumes:
+      - ./docker_data/mysql:/var/lib/mysql # Lưu trữ dữ liệu MySQL ra ngoài container (giữ data khi container bị xóa)
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro # Chạy các script khởi tạo khi container MySQL lần đầu chạy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build: . # Build image từ Dockerfile trong thư mục hiện tại
+    env_file:
+      - .env.docker # Nạp biến môi trường từ file .env.docker
+    ports:
+      - "8000:8000" # Map cổng 8000 của host sang 8000 trong container (API backend)
+    depends_on:
+      db:
+        condition: service_healthy # Chỉ khởi động API khi DB đã sẵn sàng (qua healthcheck)
+    volumes:
+      - ./Backend/app/data/UserPreference_chroma_db_E5_base:/data/chroma
+      - ./docker_data/hf_cache:/models

@@ -1,6 +1,6 @@
 import re
 import json
-from Backend.app.utils.model_utils import llmInitialize
+from Backend.app.utils.llm_gateway import generate_text
 
 
 class ExtractFieldsService:
@@ -27,7 +27,6 @@ class ExtractFieldsService:
     """
 
     def __init__(self, query: str):
-        self.model, self.tokenizer = llmInitialize.initialize_LLM()
         self.query = query
 
     def extract_fields(self) -> dict:
@@ -64,24 +63,13 @@ class ExtractFieldsService:
             }
         ]
 
-        prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-        inputs = self.tokenizer(
-            prompt, return_tensors="pt").to(self.model.device)
-
-        output = self.model.generate(
-            **inputs,
+        decoded = generate_text(
+            task_type="parsing",
+            messages=messages,
             max_new_tokens=256,
             temperature=0.0,
-            do_sample=False
+            do_sample=False,
         )
-
-        decoded = self.tokenizer.decode(
-            output[0], skip_special_tokens=True, skip_prompt=True)
 
         # Chỉ lấy phần sau "assistant"
         if "assistant" in decoded:

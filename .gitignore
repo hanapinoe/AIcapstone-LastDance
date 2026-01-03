@@ -66,3 +66,9 @@ Backend/app/services/__pycache__/
 Backend/app/repositories/__pycache__/
 Backend/app/utils/__pycache__/
 Backend/app/test/__pycache__/
+
+# Local environment files
+.env.docker
+
+# Docker local volumes/cache (should never be committed)
+docker_data/
