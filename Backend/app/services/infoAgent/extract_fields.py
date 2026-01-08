@@ -41,6 +41,57 @@ class ExtractFieldsService:
         q = (query or "").lower()
         out = {"health_status": "", "taste": "", "context": "", "category": ""}
 
+        # Health status: only extract when explicitly mentioned.
+        # Keep this conservative to avoid hallucinating medical conditions.
+        health_patterns = [
+            ("cao huyết áp", ("cao huyết áp", "huyết áp cao")),
+            ("tiểu đường", ("tiểu đường", "đái tháo đường")),
+            ("cholesterol cao", ("cholesterol cao", "mỡ máu cao", "cholesteron cao")),
+            ("gout", ("gout", "gút")),
+            ("dạ dày", ("dạ dày", "đau dạ dày", "viêm dạ dày")),
+        ]
+        for canonical, variants in health_patterns:
+            if any(v in q for v in variants):
+                out["health_status"] = canonical
+                break
+
+        # Taste: only extract when explicit cues exist.
+        # Prefer short VN phrases that match common dataset language.
+        taste_parts = []
+        if "mặn" in q:
+            if "nhẹ" in q or "mặn nhẹ" in q:
+                taste_parts.append("mặn nhẹ")
+            elif "ít" in q or "ít mặn" in q:
+                taste_parts.append("ít mặn")
+            else:
+                taste_parts.append("mặn")
+        if "ngọt" in q:
+            if "nhẹ" in q or "ngọt nhẹ" in q:
+                taste_parts.append("ngọt nhẹ")
+            elif "ít" in q or "ít ngọt" in q or "ít đường" in q:
+                taste_parts.append("ít ngọt")
+            else:
+                taste_parts.append("ngọt")
+        if "đắng" in q:
+            taste_parts.append("đắng")
+        if "nhạt" in q:
+            taste_parts.append("nhạt")
+        if "cay" in q:
+            if "ít" in q or "cay nhẹ" in q:
+                taste_parts.append("cay nhẹ")
+            else:
+                taste_parts.append("cay")
+
+        if taste_parts:
+            # de-dup while preserving order
+            seen_t = set()
+            uniq_t = []
+            for p in taste_parts:
+                if p not in seen_t:
+                    uniq_t.append(p)
+                    seen_t.add(p)
+            out["taste"] = ", ".join(uniq_t)
+
         # Category: infer only from explicit cues.
         drink_cues = ("uống", "cafe", "cà phê", "trà",
                       "sinh tố", "nước ép", "nước", "sữa")
@@ -182,5 +233,12 @@ class ExtractFieldsService:
 
         if out["category"] not in ("món ăn", "thức uống", ""):
             out["category"] = ""
+
+        # If the model returns syntactically valid JSON but leaves fields empty,
+        # merge in conservative heuristic signals (explicit keywords only).
+        heuristic = self._heuristic_extract(self.query)
+        for k in ("health_status", "taste", "context", "category"):
+            if not out.get(k) and heuristic.get(k):
+                out[k] = heuristic[k]
 
         return out
