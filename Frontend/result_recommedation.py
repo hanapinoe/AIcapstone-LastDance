@@ -1,6 +1,7 @@
 import json
 import requests
 import streamlit as st
+import html
 
 try:
     import pandas as pd
@@ -54,11 +55,11 @@ def _to_dataframe(rows):
         existing = [c for c in wanted if c in df.columns]
         df = df[existing]
         rename_map = {
-            "request": "request",
-            "dish_name": "dish name",
-            "chosen_option": "system chosen option",
-            "explaination": "explanation",
-            "time": "time",
+            "request": "Yêu cầu",
+            "dish_name": "Tên món",
+            "chosen_option": "Lựa chọn của hệ thống",
+            "explaination": "Giải thích",
+            "time": "Thời gian",
         }
         df = df.rename(
             columns={k: v for k, v in rename_map.items() if k in df.columns})
@@ -75,12 +76,77 @@ def _to_dataframe(rows):
     return pd.DataFrame(padded, columns=cols)
 
 
+def _cell_to_text(value) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd is not None and pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _render_glass_table(df):
+    # HTML table so long text wraps instead of being truncated.
+    cols = list(df.columns)
+    width_map = {
+        "Yêu cầu": 24,
+        "Tên món": 12,
+        "Lựa chọn của hệ thống": 18,
+        "Giải thích": 36,
+        "Thời gian": 10,
+    }
+    default_w = max(10, int(100 / max(len(cols), 1)))
+
+    colgroup = "".join(
+        f"<col style='width:{width_map.get(str(c).lower(), default_w)}%'>" for c in cols
+    )
+
+    thead = "".join(f"<th>{html.escape(str(c))}</th>" for c in cols)
+
+    body_rows = []
+    for row in df.itertuples(index=False, name=None):
+        tds = []
+        for v in row:
+            txt = _cell_to_text(v)
+            safe = html.escape(txt).replace("\n", "<br/>")
+            tds.append(f"<td>{safe}</td>")
+        body_rows.append("<tr>" + "".join(tds) + "</tr>")
+
+    return f"""
+    <div class="glass-table-wrapper">
+      <table class="glass-table">
+        <colgroup>{colgroup}</colgroup>
+        <thead><tr>{thead}</tr></thead>
+        <tbody>{''.join(body_rows)}</tbody>
+      </table>
+    </div>
+    """
+
+
+def _white_notice(text: str):
+    safe = html.escape(text or "").replace("\n", "<br/>")
+    st.markdown(
+        f"""
+        <div style='background:#fff; color:#222; padding:12px 16px; border-radius:8px;
+                    border:1px solid #eee; text-align:left; line-height:1.4;'>
+            <div style='font-weight:700; margin-bottom:6px;'>Thông báo</div>
+            <div>{safe}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_result():
     _ensure_busy_state()
     disabled = bool(st.session_state.get("busy"))
 
     if not st.session_state.get("logged_in"):
-        st.warning("You must log in to view History.")
+        st.warning("Bạn cần đăng nhập để xem lịch sử.")
         st.session_state["page"] = "login"
         st.rerun()
         return
@@ -88,88 +154,66 @@ def render_result():
     st.markdown(
         """
         <div style='margin-top: 0px; text-align: center; color: #fff; font-size: 40px;'>
-            History Retrieval
+            Lịch sử truy vấn
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Custom CSS for table styling
-    st.markdown("""
+    # Glass table CSS (wrap long text, keep blurred style)
+    st.markdown(
+        """
         <style>
         .block-container {
             display: flex;
             flex-direction: column;
             align-items: center;
         }
-        .stDataFrame > div {
-            border-radius: 18px !important;
-            background: rgba(30, 30, 40, 0.85) !important;
-            box-shadow: 0 4px 32px 0 rgba(0,0,0,0.18);
+        .glass-table-wrapper {
+            width: 100%;
+            max-width: 1200px;
             margin: 0 auto;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(30, 30, 40, 0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 18px;
+            padding: 12px;
+            box-shadow: 0 4px 32px 0 rgba(0,0,0,0.18);
+            overflow-x: auto;
         }
-        .stDataFrame th {
-            background: #FFB7AB !important;
-            color: #222 !important;
-            font-size: 1.1em !important;
-            text-align: center !important;
+        .glass-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
         }
-        .stDataFrame td {
-            text-align: center !important;
-            font-size: 1em !important;
-            color: #fff !important;
-            white-space: pre-line !important;
-            word-break: break-word !important;
-            max-width: none !important;
+        .glass-table thead th {
+            color: #FC9249;
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-align: left;
+            padding: 10px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.18);
+            white-space: nowrap;
         }
-        .stDataFrame td, .stDataFrame th {
-            max-width: none !important;
-            white-space: pre-line !important;
-            word-break: break-word !important;
+        .glass-table tbody td {
+            color: #fff;
+            font-size: 0.95rem;
+            padding: 10px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            vertical-align: top;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.35;
         }
         </style>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    /* NỀN MỜ (glass) cho st.table */
-    div[data-testid="stTable"], .stTable {
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        background: rgba(30, 30, 40, 0.35) !important;
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 18px;
-        padding: 12px;
-        box-shadow: 0 4px 32px 0 rgba(0,0,0,0.18);
-        overflow: hidden; /* bo góc ăn theo table */
-    }
-
-    /* Cho cell trong bảng “trong suốt” để thấy nền mờ phía sau */
-    div[data-testid="stTable"] table,
-    .stTable table {
-        width: 100%;
-    }
-
-    div[data-testid="stTable"] td,
-    .stTable td {
-        background: transparent !important;
-        color: #fff !important;
-        white-space: pre-line !important;
-        word-break: break-word !important;
-        vertical-align: top;
-    }
-                
-    /* ĐỔI MÀU CHỮ HEADER bảng */
-    div[data-testid="stTable"] thead th {
-        color: #FC9249 !important;   /* Đổi sang màu cam/đỏ nổi bật */
-        font-weight: bold !important;
-        font-size: 1.1em !important;
-        text-align: center !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.get("pending_error"):
-        st.error(st.session_state["pending_error"])
+        _white_notice(st.session_state["pending_error"])
         st.session_state["pending_error"] = None
 
     # Execution phase for seeding one demo record (so History isn't empty)
@@ -177,9 +221,9 @@ def render_result():
         base_url = st.session_state["base_url"]
         user_id = st.session_state.get("user_id")
         demo_query = (st.session_state.get("query") or "").strip(
-        ) or "Suggest any food/drink for demo"
+        ) or "Gợi ý món ăn/uống cho demo"
 
-        with st.spinner("Creating demo data..."):
+        with st.spinner("Đang tạo dữ liệu mẫu..."):
             try:
                 r = requests.post(
                     f"{base_url}/recommend",
@@ -198,7 +242,7 @@ def render_result():
                 st.session_state["history_user_payload"] = None
                 st.session_state["force_reload_history"] = True
             except Exception as e:
-                st.session_state["pending_error"] = f"Could not create demo data: {e}"
+                st.session_state["pending_error"] = f"Không thể tạo dữ liệu mẫu: {e}"
             finally:
                 st.session_state["pending_action"] = None
                 st.session_state["busy"] = False
@@ -210,7 +254,7 @@ def render_result():
         base_url = st.session_state["base_url"]
         user_id = st.session_state.get("user_id")
 
-        with st.spinner("Loading history..."):
+        with st.spinner("Đang tải lịch sử..."):
             try:
                 r = requests.post(
                     f"{base_url}/history_user",
@@ -227,7 +271,7 @@ def render_result():
                     )
                 st.session_state["history_user_payload"] = data
             except Exception as e:
-                st.session_state["pending_error"] = f"API call error: {e}"
+                st.session_state["pending_error"] = f"Lỗi gọi API: {e}"
                 st.session_state["history_user_payload"] = None
             finally:
                 st.session_state["pending_action"] = None
@@ -247,7 +291,6 @@ def render_result():
         st.session_state["force_reload_history"] = False
         st.rerun()
 
-
     # Render merged history table
     payload = st.session_state.get("history_user_payload")
     if payload is not None:
@@ -259,7 +302,7 @@ def render_result():
                 st.markdown(
                     """
                     <div style='position: center; text-align: center; color: #FF736E; font-size: 25px;'>
-                        ⚠️ No history records found
+                        ⚠️ Không tìm thấy bản ghi lịch sử nào
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -269,4 +312,8 @@ def render_result():
         else:
             col1, col2, col3 = st.columns([1, 8, 1])
             with col2:
-                st.table(df)
+                st.markdown(_render_glass_table(
+                    df.fillna("")), unsafe_allow_html=True)
+
+    if st.session_state.get("page") == "result" and not st.session_state.get("query"):
+        _white_notice("Vui lòng nhập truy vấn trước khi đề xuất.")

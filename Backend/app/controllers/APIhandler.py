@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable, cast
 import os
 import time
 import threading
@@ -22,7 +22,6 @@ app.state._worker_queue = None
 
 # Configuration from environment variables
 VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH")
-TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 MAX_TRY = int(os.getenv("RAG_MAX_TRY", "10"))
 SEED = os.getenv("RAG_SEED")
 try:
@@ -77,7 +76,6 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
         from fastapi import HTTPException
 
         vector_db_path = os.getenv("VECTOR_DB_PATH")
-        top_k = int(os.getenv("RAG_TOP_K", "5"))
         max_try = int(os.getenv("RAG_MAX_TRY", "10"))
         seed_raw = os.getenv("RAG_SEED")
 
@@ -117,9 +115,17 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
                 )
 
         agent = infoAgentService(userQuery=query, vectorDB_path=vector_db_path)
-        filtered, fields = agent.query_with_llm_and_rag(top_k=top_k)
+        filtered, fields = agent.query_with_llm_and_rag()
 
-        hit, option_result = agent.pick_random_node_that_llm_can_choose(
+        picker = cast(Optional[Callable[..., Any]], getattr(
+            agent, "pick_random_node_that_llm_can_choose", None))
+        if not callable(picker):
+            raise HTTPException(
+                status_code=500,
+                detail="infoAgentService does not implement pick_random_node_that_llm_can_choose",
+            )
+
+        hit, option_result = picker(
             filtered_nodes=filtered,
             fields=fields,
             max_try=max_try,
@@ -154,7 +160,7 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
             if not isinstance(dish_name, str) or not dish_name.strip():
                 raise HTTPException(
                     status_code=500, detail="Recommended item missing name")
-            
+
             dish_type = meta.get("type")
             if not isinstance(dish_type, str) or not dish_type.strip():
                 raise HTTPException(
@@ -182,7 +188,8 @@ def _recommend_pipeline(req_payload: Dict[str, Any], out_q: MPQueue) -> None:
             if isinstance(rec_opts, dict) and len(rec_opts) > 0:
                 # Generate explanation via rcmAgent (LoRA) using the real user query.
                 try:
-                    reason = rcmAgentService().explain_recommendation(query, dish_name, dish_type, rec_opts)
+                    reason = rcmAgentService().explain_recommendation(
+                        query, dish_name, dish_type, rec_opts)
                 except Exception:
                     reason = None
 

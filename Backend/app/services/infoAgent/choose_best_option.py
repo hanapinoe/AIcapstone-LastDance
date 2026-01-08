@@ -23,28 +23,28 @@ class ChooseBestOptionService:
         option_schema = self._parse_option_schema(self.base_options)
 
         prompt = f"""
-        You are a nutrition expert.
-        Choose the most appropriate OPTION for the dish based on user preferences and health.
+        Bạn là một chuyên gia dinh dưỡng.
+        Hãy chọn OPTION (tuỳ chọn) phù hợp nhất cho món ăn/uống dựa trên sở thích và tình trạng sức khỏe của người dùng.
 
-        == USER INFORMATION ==
-        Health status: {self.user_fields.get("health_status")}
-        Taste preference: {self.user_fields.get("taste")}
-        Context: {self.user_fields.get("context")}
+        == THÔNG TIN NGƯỜI DÙNG ==
+        Tình trạng sức khỏe: {self.user_fields.get("health_status")}
+        Sở thích hương vị: {self.user_fields.get("taste")}
+        Bối cảnh: {self.user_fields.get("context")}
 
-        == DISH ==
-        Dish name: {self.dish_name}
-        Description: {self.canonical_description}
-        Health profile suitability: {self.health_profile}
-        Context suitability: {self.context_suitability}
+        == MÓN ==
+        Tên món: {self.dish_name}
+        Mô tả: {self.canonical_description}
+        Mức độ phù hợp với sức khỏe: {self.health_profile}
+        Mức độ phù hợp với bối cảnh: {self.context_suitability}
 
-        == AVAILABLE OPTIONS ==
+        == CÁC TUỲ CHỌN CÓ SẴN ==
         {self.base_options}
 
-        Return only valid JSON, do not explain or add text outside the JSON.
-        If no perfect option exists, choose the closest or most common value for each factor.
-        NOTE: ONLY USE OPTIONS FROM {self.base_options}, DO NOT INVENT NEW ONES.
+        Chỉ trả về JSON hợp lệ, KHÔNG giải thích và KHÔNG thêm bất kỳ chữ nào ngoài JSON.
+        Nếu không có lựa chọn hoàn hảo, hãy chọn giá trị gần nhất hoặc phổ biến nhất cho mỗi yếu tố.
+        LƯU Ý: CHỈ ĐƯỢC DÙNG CÁC TUỲ CHỌN TRONG {self.base_options}, KHÔNG TỰ BỊA RA TUỲ CHỌN MỚI.
 
-        Example:
+        Ví dụ:
         {{
           "recommended_options": {{
             "ice": "less",

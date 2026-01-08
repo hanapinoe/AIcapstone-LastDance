@@ -3,6 +3,7 @@ import requests
 import streamlit as st
 import concurrent.futures
 import time
+import html
 
 
 _EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -11,13 +12,85 @@ _EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 _RECOMMEND_POLL_INTERVAL_SEC = 0.5
 
 
+def _render_glass_kv_table(rows, col_widths=(28, 72)):
+    # rows: list[dict] with keys Option/Value (or any 2-col rows)
+    safe_rows = []
+    for r in rows or []:
+        if isinstance(r, dict):
+            opt = r.get("Option", "")
+            val = r.get("Value", "")
+        else:
+            opt = ""
+            val = r
+        safe_rows.append((str(opt), "" if val is None else str(val)))
+
+    row_html = []
+    for o, v in safe_rows:
+        safe_o = html.escape(o)
+        safe_v = html.escape(v).replace("\n", "<br/>")
+        row_html.append(f"<tr><td>{safe_o}</td><td>{safe_v}</td></tr>")
+    body = "".join(row_html)
+
+    return """
+    <style>
+    .glass-kv {{
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        background: rgba(30, 30, 40, 0.35);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px;
+        padding: 10px;
+        box-shadow: 0 4px 32px 0 rgba(0,0,0,0.18);
+        overflow-x: auto;
+    }}
+    .glass-kv table {{
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }}
+    .glass-kv td {{
+        color: #fff;
+        font-size: 0.95rem;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        vertical-align: top;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.35;
+    }}
+    .glass-kv col:first-child {{ width: {w1}%; }}
+    .glass-kv col:last-child {{ width: {w2}%; }}
+    </style>
+    <div class="glass-kv">
+      <table>
+        <colgroup><col><col></colgroup>
+        <tbody>{body}</tbody>
+      </table>
+    </div>
+    """.format(body=body, w1=int(col_widths[0]), w2=int(col_widths[1]))
+
+
+class APIError(Exception):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = int(status_code)
+        self.detail = detail
+
+
 def _white_notice(text: str):
-    # Simple white “toast-like” box (avoid Streamlit st.info blue).
-    safe = (text or "").replace("<", "&lt;").replace(">", "&gt;")
+    safe = html.escape(text or "").replace("\n", "<br/>")
     st.markdown(
         f"""
-        <div style='background:#fff; color:#222; padding:12px 16px; border-radius:8px; border:1px solid #eee; text-align:center;'>
-            <b>{safe}</b>
+        <div style='
+            background: #fff;
+            color: #222;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            text-align: left;
+            line-height: 1.4;
+        '>
+            <div>{safe}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -37,14 +110,15 @@ def _call_recommend(base_url: str, payload: dict):
     data = r.json() if r.text else None
     if r.status_code >= 400:
         detail = data.get("detail", data) if isinstance(data, dict) else data
-        raise Exception(detail if isinstance(detail, str)
-                        else json.dumps(detail, ensure_ascii=False))
+        msg = detail if isinstance(detail, str) else json.dumps(
+            detail, ensure_ascii=False)
+        raise APIError(r.status_code, msg)
     return data
 
 
 def render_query():
     if not st.session_state.get("logged_in"):
-        st.warning("You must log in to use this feature.")
+        st.warning("Bạn cần đăng nhập để sử dụng chức năng này.")
         st.session_state["page"] = "login"
         st.rerun()
         return
@@ -55,7 +129,7 @@ def render_query():
     st.markdown(
         """
         <div style='margin-top: 0px; text-align: center; color: #fff; font-size: 40px;'>
-            What would you like to eat today?
+            Xin chào! Bạn muốn dùng món gì hôm nay?
         </div>
         """,
         unsafe_allow_html=True
@@ -104,15 +178,16 @@ def render_query():
 
     # Show any pending error from last action
     if st.session_state.get("pending_error"):
-        st.error(st.session_state["pending_error"])
+        _white_notice(st.session_state["pending_error"])
         st.session_state["pending_error"] = None
 
     st.session_state["query"] = st.text_area(
-        "",
+        "Nhập truy vấn",
         height=140,
         value=st.session_state.get("query", ""),
-        placeholder="Input your query here...",
+        placeholder="Nhập truy vấn tại đây...",
         disabled=disabled,
+        label_visibility="collapsed",
     )
 
     # --- if a recommend request is running in background ---
@@ -126,9 +201,13 @@ def render_query():
                     st.session_state["last_result"] = data
                     st.session_state["history_user_payload"] = None
                     st.session_state["force_reload_history"] = True
+            except APIError as e:
+                if not st.session_state.get("recommend_cancelled"):
+                    if e.status_code == 422:
+                        st.session_state["pending_error"] = "Vui lòng tạo truy vấn có tình trạng sức khỏe, khẩu vị, ngữ cảnh cụ thể hơn."
             except Exception as e:
                 if not st.session_state.get("recommend_cancelled"):
-                    st.session_state["pending_error"] = f"API call error: {e}"
+                    st.session_state["pending_error"] = str(e)
             finally:
                 st.session_state["recommend_future"] = None
                 st.session_state["recommend_cancelled"] = False
@@ -136,7 +215,8 @@ def render_query():
                 st.session_state["pending_action"] = None
             st.rerun()
         else:
-            _white_notice("Processing, please wait...")
+            _white_notice(
+                "Đang xử lý yêu cầu đề xuất... Vui lòng chờ trong giây lát.")
             # cho Stop bấm được trong lúc đang chạy
             if st.button("Stop", use_container_width=True, disabled=False):
                 base_url = st.session_state["base_url"]
@@ -172,7 +252,7 @@ def render_query():
             user = st.session_state.get("user")
             query = (st.session_state.get("query") or "").strip()
             if not query:
-                st.error("You must enter a query!")
+                st.error("Vui lòng nhập truy vấn trước khi đề xuất.")
                 return
 
             user_id = st.session_state.get("user_id")
@@ -225,11 +305,9 @@ def render_query():
             score = chosen.get("score")
             parts = []
             if name:
-                parts.append(f"<b>Chosen:</b> {name}")
+                parts.append(f"<b>Món được chọn:</b> {name}")
             if dish_type:
-                parts.append(f"<b>Type:</b> {dish_type}")
-            if score is not None:
-                parts.append(f"<b>Score:</b> {score}")
+                parts.append(f"<b>Thể loại:</b> {dish_type}")
             st.markdown(
                 """
                 <div style='backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(30, 30, 40, 0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px 12px; color: #fff; font-size: 1.05rem; margin: 6px 0 12px 0;'>
@@ -246,17 +324,19 @@ def render_query():
         if isinstance(recommended_options, dict) and len(recommended_options) > 0:
             rows = [{"Option": k, "Value": v}
                     for k, v in recommended_options.items()]
-            try:
-                import pandas as pd
-
-                st.table(pd.DataFrame(rows))
-            except Exception:
-                st.table(rows)
+            st.markdown(_render_glass_kv_table(rows), unsafe_allow_html=True)
         elif isinstance(recommended_options, list) and len(recommended_options) > 0:
             # If backend returns a list of rows (e.g. list[dict]), show it directly.
-            st.table(recommended_options)
+            st.markdown(
+                _render_glass_kv_table(
+                    [{"Option": str(i + 1), "Value": v}
+                     for i, v in enumerate(recommended_options)],
+                    col_widths=(14, 86),
+                ),
+                unsafe_allow_html=True,
+            )
         else:
-            _white_notice("No recommended options to display.")
+            _white_notice("Không có tùy chọn đề xuất nào được trả về.")
 
         if isinstance(reason, str) and reason.strip():
             st.markdown(

@@ -14,7 +14,7 @@ class RewriteQueryForRAGService:
         # Expected keys (depending on ExtractFieldsService):
         # - health_status, taste, context, category, option
         self.fields = fields or {}
-        self.user_query = self.fields.get("user_query", "")
+        self.user_query = (self.fields.get("user_query", "") or "").strip()
 
     def rewrite_query_for_rag(self):
         """
@@ -65,6 +65,14 @@ class RewriteQueryForRAGService:
 
         # Join using commas to keep chunks separable for retrieval.
         rewritten = ", ".join(parts)
+
+        # If the original query contains an explicit dish/drink name, keep it in the
+        # retrieval query so vector search can prioritize exact matches.
+        if self.user_query:
+            if rewritten:
+                rewritten = f"{rewritten}, {self.user_query}"
+            else:
+                rewritten = self.user_query
 
         if not rewritten.strip():
             rewritten = (self.user_query or "").strip()

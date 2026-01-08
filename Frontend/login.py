@@ -26,18 +26,16 @@ def render_login():
 
     _, center, _ = st.columns([3, 2, 3])
     with center:
-        username = st.text_input("Username", value="",
-                                 placeholder="Enter your username")
+        username = st.text_input("Tên đăng nhập", value="",
+                                 placeholder="Nhập tên đăng nhập của bạn")
         email = st.text_input(
-            "Email", value="", placeholder="Enter your email")
+            "Email", value="", placeholder="Nhập email của bạn")
 
-        # _, col1, _ = st.columns([3, 1, 3])
-        # _, col2, _ = st.columns([3, 1, 3])
         col1, col2 = st.columns(2)
         with col1:
-            login_clicked = st.button("Login", use_container_width=True)
+            login_clicked = st.button("Đăng nhập", use_container_width=True)
         with col2:
-            if st.button("Back to Welcome", use_container_width=True):
+            if st.button("Quay lại", use_container_width=True):
                 st.session_state["page"] = "welcome"
                 st.rerun()
 
@@ -46,7 +44,7 @@ def render_login():
             email = email.strip()
 
             if not username or not email:
-                st.error("Please enter both username and email.")
+                st.error("Vui lòng nhập đầy đủ tên đăng nhập và email.")
                 return
 
             base_url = st.session_state["base_url"]
@@ -57,7 +55,7 @@ def render_login():
                                   json=payload, timeout=60)
                 data = r.json() if r.text else None
             except Exception as e:
-                st.error(f"API call error: {e}")
+                st.error(f"Lỗi gọi API: {e}")
                 return
 
             if r.status_code >= 400:
@@ -68,7 +66,7 @@ def render_login():
                 return
 
             if not isinstance(data, dict) or "user_id" not in data:
-                st.error("Login failed, user_id not received.")
+                st.error("Đăng nhập thất bại, không nhận được mã người dùng.")
                 return
 
             st.session_state["user"] = payload
@@ -76,5 +74,15 @@ def render_login():
             st.session_state["logged_in"] = True
             st.session_state["page"] = "query"
 
-            st.success("Login successful")
+            # Persist across refresh without cookies (via URL query params)
+            try:
+                st.query_params["user_id"] = str(data["user_id"])
+                st.query_params["page"] = "query"
+            except Exception:
+                st.experimental_set_query_params(
+                    user_id=str(data["user_id"]),
+                    page="query",
+                )
+
+            st.success("Đăng nhập thành công")
             st.rerun()

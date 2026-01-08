@@ -5,6 +5,9 @@ from Backend.app.services.infoAgent.choose_best_option import ChooseBestOptionSe
 from Backend.app.services.rcmAgent.explain import ExplainationService
 
 from typing import Any, Dict, List, Optional, Tuple, Type
+from fastapi import HTTPException
+import os
+import re
 import json
 import random
 
@@ -70,19 +73,74 @@ class infoAgentService:
                 return {}
         return {}
 
-    def query_with_llm_and_rag(self, top_k: int = 5) -> Tuple[List[Any], Dict[str, Any]]:
+    @staticmethod
+    def _extract_explicit_dish_hint(query: str) -> str:
+        """Extract an explicit dish/drink name if the user clearly asks for one.
+
+        This is intentionally conservative: only triggers on patterns like
+        'uống <something>' or 'ăn <something>' to avoid blocking normal queries.
+        """
+
+        q = (query or "").strip()
+        if not q:
+            return ""
+
+        m = re.search(
+            r"\b(uống|ăn)\s+([^\n\.,;:!?]{1,40})", q, flags=re.IGNORECASE)
+        if not m:
+            return ""
+
+        hint = (m.group(2) or "").strip()
+        # Remove common fillers.
+        hint = re.sub(r"\b(một|1|ly|cốc|tách|chén|món|phần|cái)\b",
+                      "", hint, flags=re.IGNORECASE)
+        hint = re.sub(r"\s+", " ", hint).strip()
+        # Too generic => don't treat as explicit dish request.
+        hlow = hint.lower()
+        if hlow in {"gì", "cái gì", "món gì", "đồ gì"}:
+            return ""
+        # If user says "gì đó/gì đấy/cái gì đó" it's not a specific dish name.
+        if re.search(r"\bgì\b", hlow):
+            return ""
+        return hint
+
+    @classmethod
+    def _filter_by_name_hint(cls, hits: List[Any], hint: str) -> List[Any]:
+        if not hint:
+            return []
+        h = hint.lower()
+        matched: List[Any] = []
+        for hit in hits:
+            meta = cls._get_metadata(hit)
+            name = (meta.get("name", "") or "").strip().lower()
+            if not name:
+                continue
+            if h in name or name in h:
+                matched.append(hit)
+        return matched
+
+    def query_with_llm_and_rag(self, top_k: Optional[int] = None) -> Tuple[List[Any], Dict[str, Any]]:
         """
         Handles the full pipeline:
         - Extract fields from the user query using LLM.
         - Rewrite the query for RAG.
         - Retrieve documents using RAG.
         Args:
-            top_k (int): Number of top results to return after filtering.
+            top_k (Optional[int]): Number of top results to return after filtering.
+                If None, reads from env RAG_TOP_K (default: 5).
         Returns:
             Tuple[List[Any], Dict[str, Any]]: A tuple containing the list of retrieved documents and extracted fields.
         """
+        if top_k is None:
+            try:
+                top_k = int(os.getenv("RAG_TOP_K", "5"))
+            except Exception:
+                top_k = 5
+
         print("\n=== ORIGINAL QUERY ===")
         print(self.user_query)
+
+        explicit_hint = self._extract_explicit_dish_hint(self.user_query)
 
         # 1) LLM analyze fields
         fields = self._ExtractFieldsService(self.user_query).extract_fields()
@@ -92,8 +150,10 @@ class infoAgentService:
         category = (fields.get("category", "") or "").strip()
 
         # 2) Rewrite query for RAG
+        rewrite_fields = dict(fields) if isinstance(fields, dict) else {}
+        rewrite_fields["user_query"] = self.user_query
         rewritten = self._RewriteQueryForRAGService(
-            fields).rewrite_query_for_rag()
+            rewrite_fields).rewrite_query_for_rag()
         print("\n=== REWRITTEN QUERY FOR RAG ===")
         print(rewritten)
 
@@ -101,6 +161,32 @@ class infoAgentService:
         retriever = self._QueryInitializeService(
             self.vectorDB_path).query_initialize()
         raw_results = retriever.retrieve(rewritten)
+
+        # If the user explicitly asked for a specific dish/drink, try to lock onto it.
+        # This prevents recommending a different dish when the user already chose one.
+        if explicit_hint:
+            name_matches = self._filter_by_name_hint(
+                list(raw_results), explicit_hint)
+            if name_matches:
+                filtered = name_matches[:top_k]
+                print("\n=== RAG RESULTS ===")
+                print(
+                    f"Explicit dish requested: {explicit_hint} (matched {len(filtered)} results)")
+                for i, hit in enumerate(filtered):
+                    meta = self._get_metadata(hit)
+                    score = self._get_score(hit)
+                    score_str = f"{score:.4f}" if isinstance(
+                        score, (float, int)) else "N/A"
+                    print(f"\n--- Rank {i+1} | score={score_str}")
+                    print("Name:", meta.get("name"))
+                    print("Type:", meta.get("type"))
+                    print("Ingredient:", meta.get("ingredient"))
+                    print("Option_json:", meta.get("option_json"))
+                return filtered, fields
+
+            # If the explicit dish/drink name isn't found, fall back to normal RAG.
+            # This keeps the UX forgiving (the frontend already handles callbacks).
+            explicit_hint = ""
 
         # 4) Filter by category if present
         filtered: List[Any] = []

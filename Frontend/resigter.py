@@ -26,16 +26,14 @@ def render_register():
 
     _, center, _ = st.columns([3, 2, 3])
     with center:
-        username = st.text_input("Username", value="",
-                                 placeholder="Enter your username")
+        username = st.text_input("Tên đăng nhập", value="",
+                                 placeholder="Nhập tên đăng nhập của bạn")
         email = st.text_input(
-            "Email", value="", placeholder="Enter your email")
+            "Email", value="", placeholder="Nhập email của bạn")
 
-        # _, col1, _ = st.columns([1, 2, 1])
-        # _, col2, _ = st.columns([1, 2, 1])
         col1, col2 = st.columns(2)
-        register_clicked = col1.button("Register", use_container_width=True)
-        back_clicked = col2.button("Back", use_container_width=True)
+        register_clicked = col1.button("Đăng ký", use_container_width=True)
+        back_clicked = col2.button("Quay lại", use_container_width=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -46,7 +44,7 @@ def render_register():
     error_msg = None
     if register_clicked:
         if not username.strip() or not email.strip():
-            error_msg = "Please enter both username and email."
+            error_msg = "Vui lòng nhập đầy đủ tên đăng nhập và email."
         else:
             payload = {"username": username.strip(), "email": email.strip()}
             base_url = st.session_state["base_url"]
@@ -55,7 +53,7 @@ def render_register():
                                   json=payload, timeout=60)
                 data = r.json() if r.text else None
             except Exception as e:
-                error_msg = f"API Error: {e}"
+                error_msg = f"Lỗi API: {e}"
             else:
                 if r.status_code >= 400:
                     detail = data.get("detail", data) if isinstance(
@@ -63,10 +61,10 @@ def render_register():
                     error_msg = detail if isinstance(
                         detail, str) else json.dumps(detail, ensure_ascii=False)
                 elif data is None or "user_id" not in data:
-                    error_msg = "Registration failed, could not retrieve user_id."
+                    error_msg = "Đăng ký thất bại, không lấy được user_id."
                 else:
                     st.success(
-                        f"Registration successful! User ID: {data.get('user_id')}")
+                        f"Đăng ký thành công! Mã người dùng: {data.get('user_id')}")
                     st.session_state["page"] = "login"
                     st.rerun()
 

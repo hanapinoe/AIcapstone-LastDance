@@ -9,10 +9,10 @@ from logout import do_logout
 from welcome import render_welcome
 import base64
 
-st.set_page_config(page_title="demo AI Capstone", layout="wide")
+st.set_page_config(page_title="Trợ lý Dinh dưỡng AI Capstone", layout="wide")
 st.markdown(
-    "<h1 style='text-align: center; font-family: Helvetica; font-size: 60px;'>Nutrition Assistant</h1>"
-    "<h6 style='text-align: center;'>Developed by GFA25AI11 team</h6>",
+    "<h1 style='text-align: center; font-family: Helvetica; font-size: 60px;'>Trợ lý Dinh dưỡng</h1>"
+    "<h6 style='text-align: center;'>Được phát triển bởi GFA25AI11-Team</h6>",
     unsafe_allow_html=True
 )
 
@@ -87,16 +87,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Hide sidebar if not logged in or on welcome/login/register/logout pages
-if not st.session_state.get("logged_in") or st.session_state.get("page") in ("welcome", "login", "register", "logout"):
-    st.markdown("""
-        <style>
-        section[data-testid="stSidebar"] {
-            display: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
 # ---- init session state ----
 defaults = {
     "logged_in": False,
@@ -112,29 +102,96 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+
+def _qp_get(name: str):
+    try:
+        v = st.query_params.get(name)
+    except Exception:
+        # older streamlit fallback
+        v = st.experimental_get_query_params().get(name)
+    if isinstance(v, list):
+        return v[0] if v else None
+    return v
+
+
+def _restore_auth_from_query_params() -> None:
+    if st.session_state.get("logged_in"):
+        return
+
+    user_id_raw = _qp_get("user_id")
+    if not user_id_raw:
+        return
+
+    try:
+        user_id = int(user_id_raw)
+    except Exception:
+        return
+
+    page = _qp_get("page")
+
+    st.session_state["user_id"] = user_id
+    # Do not restore username/email from URL to avoid leaking PII.
+    st.session_state["user"] = st.session_state.get("user") or {}
+    st.session_state["logged_in"] = True
+
+    # Best-effort cleanup of any old sensitive params still in the URL.
+    try:
+        st.query_params.pop("username", None)
+        st.query_params.pop("email", None)
+    except Exception:
+        pass
+
+    # After refresh, avoid landing on auth screens
+    if page in ("query", "result"):
+        st.session_state["page"] = page
+    elif st.session_state.get("page") in ("welcome", "login", "register", "logout"):
+        st.session_state["page"] = "query"
+
+
+_restore_auth_from_query_params()
+
+
+# Hide sidebar if not logged in or on welcome/login/register/logout pages
+if (not st.session_state.get("logged_in")) or (st.session_state.get("page") in ("welcome", "login", "register", "logout")):
+    st.markdown("""
+        <style>
+        section[data-testid="stSidebar"] {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 # ---- sidebar: backend + nav ----
 with st.sidebar:
     st.subheader("Menu")
     sidebar_disabled = bool(st.session_state.get("busy"))
 
     if st.session_state["logged_in"]:
-        if st.button("Query", use_container_width=True, disabled=sidebar_disabled):
+        if st.button("Truy vấn", use_container_width=True, disabled=sidebar_disabled):
             st.session_state["page"] = "query"
+            try:
+                st.query_params["page"] = "query"
+            except Exception:
+                st.experimental_set_query_params(page="query")
             st.rerun()
-        if st.button("History", use_container_width=True, disabled=sidebar_disabled):
+        if st.button("Lịch sử", use_container_width=True, disabled=sidebar_disabled):
             st.session_state["page"] = "result"
             st.session_state["history_user_payload"] = None
             st.session_state["force_reload_history"] = True
+            try:
+                st.query_params["page"] = "result"
+            except Exception:
+                st.experimental_set_query_params(page="result")
             st.rerun()
-        if st.button("Logout", use_container_width=True, disabled=sidebar_disabled):
+        if st.button("Đăng xuất", use_container_width=True, disabled=sidebar_disabled):
             do_logout()
 
     user = st.session_state.get("user") or {}
-    username_display = user.get("username") or "Guest"
+    username_display = user.get("username") or "Khách"
     st.markdown(
         f"""
         <div style='text-align: center; color: #fff; font-size: 20px; position: fixed; bottom: 50px; width: 80%;'>
-            ☃️ Welcome {username_display} ❄️
+            ☃️ Xin chào {username_display} ❄️
         </div>
         """,
         unsafe_allow_html=True
