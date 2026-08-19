@@ -72,4 +72,4 @@ python mainFE.py
 Mọi đóng góp đều được hoan nghênh! Vui lòng tạo pull request hoặc issue nếu bạn có ý tưởng hoặc phát hiện lỗi.
 
 ## License
-[MIT](LICENSE) (hoặc license bạn chọn)
+[MIT](LICENSE)
